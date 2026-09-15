@@ -132,9 +132,18 @@
   "use strict";
 
   var DATA_URL = 'data.json';
-  var START = [35.681236, 139.767125]; // 起動時の仮の中心（東京駅）
+  var START = [34.7769, 135.6256]; // 寝屋川市中心
+  var BOUNDS = L.latLngBounds(
+    [34.68, 135.52],  // 南西（周辺込み）
+    [34.88, 135.74]   // 北東
+  );
 
-  var map = L.map('map', {zoomControl:false}).setView(START, 16);
+  var map = L.map('map', {
+    zoomControl: false,
+    maxBounds: BOUNDS,
+    maxBoundsViscosity: 1.0,
+    minZoom: 12
+  }).setView(START, 14);
   L.control.zoom({position:'topright'}).addTo(map);
 
   var onlineLayer = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
