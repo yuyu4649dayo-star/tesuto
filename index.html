@@ -134,15 +134,15 @@
   var DATA_URL = 'data.json';
   var START = [34.7769, 135.6256]; // 寝屋川市中心
   var BOUNDS = L.latLngBounds(
-    [34.68, 135.52],  // 南西（周辺込み）
-    [34.88, 135.74]   // 北東
+    [34.745, 135.585], // 南西（寝屋川市境界）
+    [34.820, 135.665]  // 北東（寝屋川市境界）
   );
 
   var map = L.map('map', {
     zoomControl: false,
     maxBounds: BOUNDS,
     maxBoundsViscosity: 1.0,
-    minZoom: 12
+    minZoom: 13
   }).setView(START, 14);
   L.control.zoom({position:'topright'}).addTo(map);
 
