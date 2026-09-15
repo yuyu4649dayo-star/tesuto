@@ -30,7 +30,6 @@
     display:flex;align-items:baseline;gap:10px;flex:none;
   }
   header h1{font-size:17px;font-weight:700;margin:0;letter-spacing:.04em}
-  header .badge{font-size:11px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,.22)}
   header .count{margin-left:auto;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
   header .count small{font-weight:400;opacity:.8}
 
@@ -53,7 +52,6 @@
   }
   button.ghost{background:#EDEEE9;color:var(--ink);border:1px solid var(--line);font-weight:400}
   button.on{background:var(--mine);color:var(--ink)}
-  button.map{background:var(--hot);color:#fff}
   button:disabled{opacity:.45;cursor:default}
   button:focus-visible,input:focus-visible{outline:2px solid var(--hot);outline-offset:1px}
 
@@ -89,7 +87,7 @@
 
 <header>
   <h1>自販機マップ</h1>
-  <span class="badge" id="mapMode">オンライン地図</span>
+
   <div class="count"><span id="count">0</span><small> 件</small></div>
 </header>
 
@@ -101,12 +99,6 @@
     <button id="here" class="ghost">現在地</button>
     <button id="search">この範囲をOSMで検索</button>
   </div>
-
-  <div class="bar sub">
-    <button id="loadMbtiles" class="map">地図ファイル(.mbtiles)を読み込む</button>
-    <button id="toggleMap" class="ghost" disabled>オンライン地図に戻す</button>
-  </div>
-  <div class="hint">MOBACなどで作った .mbtiles を読み込むと、地図画像そのものをオフラインで表示できます（インターネット接続なしで表示可）。</div>
 
   <div class="bar sub">
     <input type="text" id="coord" placeholder="緯度,経度（Google Earthから貼り付け）" autocomplete="off" inputmode="decimal">
@@ -133,9 +125,7 @@
 </div>
 
 <input type="file" id="file" accept="application/json,.json" hidden>
-<input type="file" id="mbtilesFile" accept=".mbtiles" hidden>
 
-<script src="https://cdn.jsdelivr.net/npm/sql.js@1.14.0/dist/sql-wasm.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script>
 (function(){
@@ -147,13 +137,10 @@
   var map = L.map('map', {zoomControl:false}).setView(START, 16);
   L.control.zoom({position:'topright'}).addTo(map);
 
-  var onlineLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors'
+  var onlineLayer = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">国土地理院</a>'
   }).addTo(map);
-
-  var mbtilesLayer = null;
-  var mbtilesDB = null;
 
   var layer = L.layerGroup().addTo(map);
   var circle = null;
@@ -457,110 +444,6 @@
     };
     reader.readAsText(f);
     e.target.value = '';
-  });
-
-  // --- .mbtiles を読み込んでオフライン地図に切り替える ---
-  var MBTilesLayer = L.TileLayer.extend({
-    createTile: function(coords, done){
-      var img = document.createElement('img');
-      img.alt = '';
-      if(!mbtilesDB){ done(null, img); return img; }
-      var tmsY = (Math.pow(2, coords.z) - 1) - coords.y;
-      try{
-        var stmt = mbtilesDB.prepare(
-          'SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=? LIMIT 1'
-        );
-        stmt.bind([coords.z, coords.x, tmsY]);
-        if(stmt.step()){
-          var row = stmt.getAsObject();
-          stmt.free();
-          var blob = new Blob([row.tile_data], {type: mbtilesLayer._mime || 'image/png'});
-          var url = URL.createObjectURL(blob);
-          img.onload = function(){ URL.revokeObjectURL(url); done(null, img); };
-          img.onerror = function(){ URL.revokeObjectURL(url); done(null, img); };
-          img.src = url;
-        } else {
-          stmt.free();
-          done(null, img); // このズーム/範囲にタイルがない
-        }
-      }catch(err){
-        done(null, img);
-      }
-      return img;
-    }
-  });
-
-  var sqlReady = initSqlJs({
-    locateFile: function(f){ return 'https://cdn.jsdelivr.net/npm/sql.js@1.14.0/dist/' + f; }
-  }).catch(function(){ return null; });
-
-  function readMetadata(db){
-    var out = {};
-    try{
-      var res = db.exec('SELECT name, value FROM metadata');
-      if(res && res[0]){
-        res[0].values.forEach(function(row){ out[row[0]] = row[1]; });
-      }
-    }catch(e){}
-    return out;
-  }
-
-  $('loadMbtiles').addEventListener('click', function(){ $('mbtilesFile').click(); });
-  $('mbtilesFile').addEventListener('change', function(e){
-    var f = e.target.files[0];
-    if(!f) return;
-    say('地図ファイルを読み込み中…');
-    Promise.all([sqlReady, f.arrayBuffer()]).then(function(res){
-      var SQL = res[0], buf = res[1];
-      if(!SQL){ say('sql.js を初期化できませんでした。通信環境を確認してください。', true); return; }
-      if(mbtilesDB){ try{ mbtilesDB.close(); }catch(e){} }
-      mbtilesDB = new SQL.Database(new Uint8Array(buf));
-      var md = readMetadata(mbtilesDB);
-      var fmt = (md.format || 'png').toLowerCase();
-      var mime = fmt === 'jpg' || fmt === 'jpeg' ? 'image/jpeg' : (fmt === 'webp' ? 'image/webp' : 'image/png');
-
-      if(mbtilesLayer){ map.removeLayer(mbtilesLayer); }
-      mbtilesLayer = new MBTilesLayer('', {
-        minZoom: md.minzoom ? parseInt(md.minzoom, 10) : 0,
-        maxZoom: md.maxzoom ? parseInt(md.maxzoom, 10) : 19,
-        attribution: (md.attribution || '&copy; OpenStreetMap contributors') + '（オフライン）'
-      });
-      mbtilesLayer._mime = mime;
-
-      map.removeLayer(onlineLayer);
-      mbtilesLayer.addTo(map);
-
-      if(md.bounds){
-        var b = md.bounds.split(',').map(parseFloat);
-        if(b.length === 4 && b.every(function(n){ return !isNaN(n); })){
-          map.fitBounds([[b[1], b[0]], [b[3], b[2]]]);
-        }
-      }
-
-      $('mapMode').textContent = 'オフライン地図：' + (md.name || f.name);
-      $('toggleMap').disabled = false;
-      $('toggleMap').textContent = 'オンライン地図に戻す';
-      say('「' + f.name + '」を読み込みました。以後は地図画像の表示に通信が要りません。');
-    }).catch(function(err){
-      say('この地図ファイルを読み込めませんでした（' + err.message + '）。', true);
-    });
-    e.target.value = '';
-  });
-
-  $('toggleMap').addEventListener('click', function(){
-    if(map.hasLayer(mbtilesLayer)){
-      map.removeLayer(mbtilesLayer);
-      onlineLayer.addTo(map);
-      $('mapMode').textContent = 'オンライン地図';
-      this.textContent = 'オフライン地図に戻す';
-      say('オンライン地図に戻しました。');
-    } else if(mbtilesLayer){
-      map.removeLayer(onlineLayer);
-      mbtilesLayer.addTo(map);
-      $('mapMode').textContent = 'オフライン地図';
-      this.textContent = 'オンライン地図に戻す';
-      say('オフライン地図に戻しました。');
-    }
   });
 
   loadInitial();
