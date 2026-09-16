@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>自販機マップ</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <style>
@@ -184,6 +184,10 @@
     }).addTo(map);
   }
   map.on('moveend', drawCircle);
+  // Safariのページズームをすり抜けてもzoom14未満には戻す
+  map.on('zoomend', function(){
+    if(map.getZoom() < 14) map.setZoom(14, {animate: false});
+  });
   drawCircle();
 
   function dist(a, b){
